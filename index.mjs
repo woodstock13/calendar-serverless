@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import CalendarG from './calendar.mjs';
+import calendarRoutes from './controllers/calendar.mjs';
 
 const fastify = Fastify({
 	logger: true,
@@ -10,18 +10,16 @@ const fastify = Fastify({
  * middleware protection for call - x-api-secret
  * logic service + front integration
  */
+
 fastify.get('/', async (request, reply) => {
-	return { hello: 'world' };
+	return { hello: 'world2' };
 });
 fastify.get('/ping', async (request, reply) => {
 	return { ping: 'pong' };
 });
 
-fastify.get('/calendar', async (request, reply) => {
-	const calendar = new CalendarG();
-	const toto = await calendar.getEventsListFromCalendar();
-	return JSON.stringify(toto);
-});
+// Registered Routes
+fastify.register(calendarRoutes);
 
 /**
  * Run the server!

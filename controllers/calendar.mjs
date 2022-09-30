@@ -3,13 +3,28 @@ import { google } from 'googleapis';
 import * as dotenv from 'dotenv'; // see https://github.com/motdotla/dotenv#how-do-i-use-dotenv-with-import
 dotenv.config();
 
+// our-first-route.js
+
+/**
+ * Encapsulates the routes
+ * @param {FastifyInstance} fastify  Encapsulated Fastify Instance
+ * @param {Object} options plugin options, refer to https://www.fastify.io/docs/latest/Reference/Plugins/#plugin-options
+ */
+export default async function calendarRoutes(fastify, options) {
+	fastify.get('/calendar/events', async (request, reply) => {
+		const calendar = new CalendarG();
+		const toto = await calendar.getEventsListFromCalendar();
+		return JSON.stringify(toto);
+	});
+}
+
 const GOOGLE_PRIVATE_KEY = process.env.PRIVATE_KEY.replace(/\\n/g, '\n');
 const GOOGLE_CLIENT_EMAIL = process.env.CLIENT_EMAIL;
 const GOOGLE_PROJECT_NUMBER = process.env.PROJECT_NUMBER;
 const GOOGLE_CALENDAR_ID = process.env.CALENDAR_ID;
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 
-export default class CalendarG {
+class CalendarG {
 	calendarInstance;
 
 	constructor() {
@@ -23,6 +38,7 @@ export default class CalendarG {
 
 	getEventsListFromCalendar = async () => {
 		let res;
+		// todo set timezone convert for fr
 		try {
 			res = (
 				await this.calendarInstance.events.list({
