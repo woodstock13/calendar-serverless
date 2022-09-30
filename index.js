@@ -6,6 +6,9 @@ const fastify = require('fastify')({
 fastify.get('/', async (request, reply) => {
 	return { hello: 'world' };
 });
+fastify.get('/ping', async (request, reply) => {
+	return { ping: 'pong' };
+});
 
 /**
  * Run the server!
