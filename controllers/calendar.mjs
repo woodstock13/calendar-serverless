@@ -11,10 +11,10 @@ export default async function calendarRoutes(fastify, options) {
 	fastify.get('/calendar/events', async (request, reply) => {
 		return JSON.stringify(calendar.test_events);
 	});
-	fastify.get('/calendar/availabilities', async (request, reply) => {
+	fastify.get('/calendar/plekers-availabilities', async (request, reply) => {
 		return JSON.stringify(await calendar.pleker_availability_day_mapping());
 	});
-	fastify.get('/calendar/compute', async (request, reply) => {
+	fastify.get('/calendar/days-availabilities', async (request, reply) => {
 		const availabilities_map = await calendar.days_availability_mapping();
 		const availabilities = Object.fromEntries(availabilities_map);
 		return JSON.stringify(availabilities);
@@ -25,7 +25,7 @@ export default async function calendarRoutes(fastify, options) {
 		const availabilities_map = await calendar.days_availability_mapping();
 		const closest_date = calendar.get_closest_days_from(date, availabilities_map);
 
-		return JSON.stringify(closest_date);
+		return JSON.stringify({ closest_day_fr_short_date: closest_date });
 	});
 }
 
@@ -75,9 +75,11 @@ export class CalendarG {
 			).data;
 			this.test_events = res.items;
 			return this.test_events;
-		} catch (error) {
-			console.error('Something went wrong: ' + err); // If there is an error, log it to the console
-			return null;
+		} catch (err) {
+			console.error('Something went wrong: ' + err);
+			if (err) {
+				throw new Error('No events');
+			}
 		}
 	};
 
@@ -86,9 +88,13 @@ export class CalendarG {
 	 */
 	pleker_availability_day_mapping = async () => {
 		const events = this.test_events || (await this.getEventsListFromCalendar());
+		if (events === null) {
+			console.error('Something went wrong: pleker_availability_day_mapping()');
+			throw new Error('No events');
+		}
+
 		const plekerMapping = new Map();
 		const availableDays = new Set();
-
 		events.forEach((event) => {
 			// check name event ? for pleker
 			const plekerId = event.creator.email;
@@ -116,9 +122,13 @@ export class CalendarG {
 	 */
 	days_availability_mapping = async () => {
 		const events = this.test_events || (await this.getEventsListFromCalendar());
-		// check if events ?
-		const daysCounter = new Map();
 
+		if (events === null) {
+			console.error('Something went wrong: days_availability_mapping()');
+			throw new Error('No events');
+		}
+
+		const daysCounter = new Map();
 		events.forEach((event) => {
 			const isPlekType = event.status !== 'confirmed' || event.summary === 'PLEK';
 			const plekerId = event.creator.email;
