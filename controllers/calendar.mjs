@@ -2,25 +2,36 @@
 import { google } from 'googleapis';
 import * as dotenv from 'dotenv'; // see https://github.com/motdotla/dotenv#how-do-i-use-dotenv-with-import
 dotenv.config();
+import { DateTime } from 'luxon';
+import { IsoStringToShortFrDate, checkDaysDiff } from '../common/utils.mjs';
 
-// calendar
-/**
- * Encapsulates the routes
- * @param {FastifyInstance} fastify  Encapsulated Fastify Instance
- * @param {Object} options plugin options, refer to https://www.fastify.io/docs/latest/Reference/Plugins/#plugin-options
- */
 export default async function calendarRoutes(fastify, options) {
+	const calendar = new CalendarG();
+
 	fastify.get('/calendar/events', async (request, reply) => {
-		const calendar = new CalendarG();
-		const events = await calendar.getEventsListFromCalendar();
-		return JSON.stringify(events);
+		return JSON.stringify(calendar.test_events);
 	});
-	fastify.get('/calendar/availibilies', async (request, reply) => {
-		const calendar = new CalendarG();
-		const availibilities = await calendar.pleker_availability_day_mapping();
-		return JSON.stringify(availibilities);
+	fastify.get('/calendar/availabilities', async (request, reply) => {
+		return JSON.stringify(await calendar.pleker_availability_day_mapping());
+	});
+	fastify.get('/calendar/compute', async (request, reply) => {
+		const availabilities_map = await calendar.days_availability_mapping();
+		const availabilities = Object.fromEntries(availabilities_map);
+		return JSON.stringify(availabilities);
+	});
+	fastify.get('/calendar/next-availability-from/:date', async (request, reply) => {
+		const { date } = request.params;
+
+		const availabilities_map = await calendar.days_availability_mapping();
+		const closest_date = calendar.get_closest_days_from(date, availabilities_map);
+
+		return JSON.stringify(closest_date);
 	});
 }
+
+// TODO RAF:
+// change to TS
+// decouper le service
 
 // service
 const GOOGLE_PRIVATE_KEY = process.env.PRIVATE_KEY.replace(/\\n/g, '\n');
@@ -29,13 +40,14 @@ const GOOGLE_PROJECT_NUMBER = process.env.PROJECT_NUMBER;
 const GOOGLE_CALENDAR_ID = process.env.CALENDAR_ID;
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 
-class CalendarG {
+export class CalendarG {
+	test_events = null; // todo: setter / getter
+
+	// test_events set once at the CalendarG Init
 	constructor() {
 		if (CalendarG._calendarInstance) {
-			console.log('old instance');
 			CalendarG._calendarInstance;
 		} else {
-			console.log('new instance');
 			this.initCalendarInstance();
 		}
 	}
@@ -46,13 +58,13 @@ class CalendarG {
 			project: GOOGLE_PROJECT_NUMBER,
 			auth: jwtClient,
 		});
+		// init events
+		this.getEventsListFromCalendar().then();
 	}
 
 	getEventsListFromCalendar = async () => {
-		let res;
-		// todo set timezone convert for fr
 		try {
-			res = (
+			const res = (
 				await CalendarG._calendarInstance.events.list({
 					calendarId: GOOGLE_CALENDAR_ID,
 					timeMin: new Date().toISOString(),
@@ -61,33 +73,21 @@ class CalendarG {
 					orderBy: 'startTime',
 				})
 			).data;
+			this.test_events = res.items;
+			return this.test_events;
 		} catch (error) {
-			if (err) {
-				console.dir(err);
-				console.error('Something went wrong: ' + err); // If there is an error, log it to the console
-				return null;
-			}
-			console.log('Events loaded successfully.');
-			console.log('Events details: ', response.data); // Log the event details
+			console.error('Something went wrong: ' + err); // If there is an error, log it to the console
+			return null;
 		}
-		console.dir(res.items[0].creator.email); // Log the event details
-		return res.items;
 	};
 
 	/**
-	 * Encapsulates the routes
-	 * @param {FastifyInstance} fastify  Encapsulated Fastify Instance
-	 * @param {Object} options plugin options, refer to https://www.fastify.io/docs/latest/Reference/Plugins/#plugin-options
+	 * Return an Overview availabilities by pleker + the Set of dates.
 	 */
-	//  interface I_event {
-	// 	pleker_id: string
-	// 	// city?: string
-	// 	availability_dates: Date[] SET?
-	// 	plekers_slots: Date[]
-	// }
 	pleker_availability_day_mapping = async () => {
-		const events = await this.getEventsListFromCalendar();
+		const events = this.test_events || (await this.getEventsListFromCalendar());
 		const plekerMapping = new Map();
+		const availableDays = new Set();
 
 		events.forEach((event) => {
 			// check name event ? for pleker
@@ -101,10 +101,101 @@ class CalendarG {
 				const current_dates = plekerMapping.get(plekerId).availability_dates;
 				plekerMapping.set(plekerId, { availability_dates: [startDate, ...current_dates] });
 			}
+			const dt = DateTime.fromISO(startDate).setLocale('fr');
+			availableDays.add(dt.toLocaleString(DateTime.DATE_SHORT));
 		});
-
+		plekerMapping.set('days', [...availableDays]);
 		return Object.fromEntries(plekerMapping);
+		// return events;
 	};
+
+	/**
+	 * Return availabilities by a Set of dates.
+	 *
+	 * @return Days_availability_mapped object Map<day:string {availabilities: [string], pleks: [string], plekers: [string]}>
+	 */
+	days_availability_mapping = async () => {
+		const events = this.test_events || (await this.getEventsListFromCalendar());
+		// check if events ?
+		const daysCounter = new Map();
+
+		events.forEach((event) => {
+			const isPlekType = event.status !== 'confirmed' || event.summary === 'PLEK';
+			const plekerId = event.creator.email;
+
+			const startDate = event.start.dateTime || event.start.date;
+			const event_day = DateTime.fromISO(startDate)
+				.setLocale('fr')
+				.toLocaleString(DateTime.DATE_SHORT);
+			const day_elements = daysCounter.get(event_day);
+
+			const updatingAvailabilities = () => {
+				const is_pleker_already_counted_this_day = day_elements.plekers.includes(plekerId);
+				let updated_data_day = null;
+
+				if (isPlekType) {
+					updated_data_day = {
+						availabilities: day_elements.availabilities,
+						pleks: day_elements.pleks + 1,
+						plekers: [...day_elements.plekers] || [],
+					};
+				} else {
+					updated_data_day = {
+						availabilities: day_elements.availabilities + 1,
+						pleks: day_elements.pleks,
+						plekers: is_pleker_already_counted_this_day
+							? [...day_elements.plekers]
+							: [...day_elements.plekers, plekerId],
+					};
+				}
+				daysCounter.set(event_day, updated_data_day);
+			};
+			const creatingDayRecord = () => {
+				daysCounter.set(event_day, {
+					availabilities: isPlekType ? 0 : 1,
+					pleks: isPlekType ? 1 : 0,
+					plekers: [plekerId],
+				});
+			};
+			day_elements ? updatingAvailabilities() : creatingDayRecord();
+		});
+		return daysCounter;
+	};
+
+	// todo :
+	// 2) write test
+	// 3) alert no events email;
+	/**
+	 *  @param(selected_date_iso_format) incoming string iso date
+	 *  @param(available_days_mapping) Map of available days
+	 *
+	 *  @return the same or the closest date available as string
+	 */
+	get_closest_days_from(selected_date_iso_format, available_days_mapping) {
+		const selected_date_fr_format = IsoStringToShortFrDate(selected_date_iso_format);
+
+		let flag = false;
+		let min_diff_value = 365;
+		let min_date = selected_date_fr_format;
+
+		available_days_mapping.forEach((value, key_date) => {
+			if (value.pleks < value.availabilities) {
+				if (!flag) {
+					if (key_date !== selected_date_fr_format) {
+						let diff = Math.abs(checkDaysDiff(key_date, selected_date_iso_format));
+						if (diff < min_diff_value) {
+							min_diff_value = diff;
+							min_date = key_date;
+						}
+					} else {
+						min_date = selected_date_fr_format;
+						flag = true;
+					}
+				}
+			}
+		});
+		return min_date;
+	}
 
 	// todo
 	createEvent = () => {

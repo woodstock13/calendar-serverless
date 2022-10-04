@@ -5,15 +5,18 @@
 		"node": "16.x"
 	},
 	"scripts": {
-		"start": "node index.js"
+		"start": "node index.js",
+		"dev": "nodemon index.mjs"
 	},
 	"dependencies": {
 		"dotenv": "^16.0.2",
 		"fastify": "^4.6.0",
-		"googleapis": "105"
+		"googleapis": "105",
+		"luxon": "^3.0.4"
 	},
 	"devDependencies": {
+		"@vercel/node": "^1.11.1",
 		"nodemon": "^2.0.20",
-		"@vercel/node": "^1.11.1"
+		"prettier": "2.7.1"
 	}
 }
