@@ -1,47 +1,22 @@
 'use strict';
 import { google } from 'googleapis';
-import * as dotenv from 'dotenv'; // see https://github.com/motdotla/dotenv#how-do-i-use-dotenv-with-import
-dotenv.config();
 import { DateTime } from 'luxon';
-import { IsoStringToShortFrDate, checkDaysDiff } from '../common/utils.mjs';
+import {
+	checkDaysDiff,
+	IsoStringToShortFrDate,
+	shortFrDateToDateTimeObject,
+} from '../common/utils.mjs';
+import * as dotenv from 'dotenv';
+dotenv.config();
 
-export default async function calendarRoutes(fastify, options) {
-	const calendar = new CalendarG();
-
-	fastify.get('/calendar/events', async (request, reply) => {
-		return JSON.stringify(calendar.test_events);
-	});
-	fastify.get('/calendar/plekers-availabilities', async (request, reply) => {
-		return JSON.stringify(await calendar.pleker_availability_day_mapping());
-	});
-	fastify.get('/calendar/days-availabilities', async (request, reply) => {
-		const availabilities_map = await calendar.days_availability_mapping();
-		const availabilities = Object.fromEntries(availabilities_map);
-		return JSON.stringify(availabilities);
-	});
-	fastify.get('/calendar/next-availability-from/:date', async (request, reply) => {
-		const { date } = request.params;
-
-		const availabilities_map = await calendar.days_availability_mapping();
-		const closest_date = calendar.get_closest_days_from(date, availabilities_map);
-
-		return JSON.stringify({ closest_day_fr_short_date: closest_date });
-	});
-}
+const GOOGLE_CALENDAR_ID = process.env.CALENDAR_ID;
 
 // TODO RAF:
-// change to TS
-// decouper le service
-
-// service
-const GOOGLE_PRIVATE_KEY = process.env.PRIVATE_KEY.replace(/\\n/g, '\n');
-const GOOGLE_CLIENT_EMAIL = process.env.CLIENT_EMAIL;
-const GOOGLE_PROJECT_NUMBER = process.env.PROJECT_NUMBER;
-const GOOGLE_CALENDAR_ID = process.env.CALENDAR_ID;
-const SCOPES = ['https://www.googleapis.com/auth/calendar'];
-
+// x) change to TS
+// x) handle event cache
 export class CalendarG {
 	test_events = null; // todo: setter / getter
+	NUMBER_OF_DAYS_FROM_NOW = 15;
 
 	// test_events set once at the CalendarG Init
 	constructor() {
@@ -52,6 +27,11 @@ export class CalendarG {
 		}
 	}
 	initCalendarInstance() {
+		const GOOGLE_PRIVATE_KEY = process.env.PRIVATE_KEY.replace(/\\n/g, '\n');
+		const GOOGLE_CLIENT_EMAIL = process.env.CLIENT_EMAIL;
+		const GOOGLE_PROJECT_NUMBER = process.env.PROJECT_NUMBER;
+		const SCOPES = ['https://www.googleapis.com/auth/calendar'];
+
 		const jwtClient = new google.auth.JWT(GOOGLE_CLIENT_EMAIL, null, GOOGLE_PRIVATE_KEY, SCOPES);
 		CalendarG._calendarInstance = google.calendar({
 			version: 'v3',
@@ -63,11 +43,13 @@ export class CalendarG {
 	}
 
 	getEventsListFromCalendar = async () => {
+		const GOOGLE_CALENDAR_ID = process.env.CALENDAR_ID;
 		try {
 			const res = (
 				await CalendarG._calendarInstance.events.list({
 					calendarId: GOOGLE_CALENDAR_ID,
 					timeMin: new Date().toISOString(),
+					timeMax: DateTime.now().plus({ days: 15 }).setZone('Europe/Paris').toString(),
 					maxResults: 100,
 					singleEvents: true,
 					orderBy: 'startTime',
@@ -86,7 +68,7 @@ export class CalendarG {
 	/**
 	 * Return an Overview availabilities by pleker + the Set of dates.
 	 */
-	pleker_availability_day_mapping = async () => {
+	plekersAvailabilityMapping = async () => {
 		const events = this.test_events || (await this.getEventsListFromCalendar());
 		if (events === null) {
 			console.error('Something went wrong: pleker_availability_day_mapping()');
@@ -120,7 +102,7 @@ export class CalendarG {
 	 *
 	 * @return Days_availability_mapped object Map<day:string {availabilities: [string], pleks: [string], plekers: [string]}>
 	 */
-	days_availability_mapping = async () => {
+	daysAvailabilityMapping = async () => {
 		const events = this.test_events || (await this.getEventsListFromCalendar());
 
 		if (events === null) {
@@ -181,7 +163,7 @@ export class CalendarG {
 	 *
 	 *  @return the same or the closest date available as string
 	 */
-	get_closest_days_from(selected_date_iso_format, available_days_mapping) {
+	getClosestDaysFrom(selected_date_iso_format, available_days_mapping) {
 		const selected_date_fr_format = IsoStringToShortFrDate(selected_date_iso_format);
 
 		let flag = false;
@@ -207,27 +189,46 @@ export class CalendarG {
 		return min_date;
 	}
 
-	// todo
-	createEvent = () => {
+	getNextDaysAvailable(available_days_mapping) {
+		const daysAvailable = [];
+		available_days_mapping.forEach((value, date) => {
+			if (value.pleks < value.availabilities) {
+				daysAvailable.push(shortFrDateToDateTimeObject(date).toISO());
+			}
+		});
+		return daysAvailable;
+	}
+
+	/* input: plekId, plekerId, start_date_iso_plek, end_date_iso_plek ...*/
+	createEvent = async () => {
 		var calendarEvent = {
-			summary: 'Test Event added by Node.js',
+			summary: 'PLEK id here',
 			description: 'This event was created by Node.js',
 			start: {
-				dateTime: '2022-06-03T09:00:00-02:00',
-				timeZone: 'Asia/Kolkata',
+				dateTime: '2022-10-08T09:18:00-02:00',
+				timeZone: 'Europe/Paris',
 			},
 			end: {
-				dateTime: '2022-06-04T17:00:00-02:00',
-				timeZone: 'Asia/Kolkata',
+				dateTime: '2022-10-08T09:19:00-02:00',
+				timeZone: 'Europe/Paris',
 			},
-			attendees: [],
-			reminders: {
-				useDefault: false,
-				overrides: [
-					{ method: 'email', minutes: 24 * 60 },
-					{ method: 'popup', minutes: 10 },
-				],
+			creator: {
+				email: 'thomas.gouty@pleko.ca',
 			},
 		};
+		try {
+			const res = (
+				await CalendarG._calendarInstance.events.insert({
+					calendarId: GOOGLE_CALENDAR_ID,
+					resource: calendarEvent,
+				})
+			).data;
+			console.log(res);
+		} catch (err) {
+			console.error('Something went wrong: ' + err);
+			if (err) {
+				throw new Error('No events');
+			}
+		}
 	};
 }

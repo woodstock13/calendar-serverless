@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import calendarRoutes from './controllers/calendar.mjs';
+import calendarRoutes from './controllers/calendar.controller.mjs';
 
 const fastify = Fastify({
 	logger: true,
@@ -11,15 +11,11 @@ const fastify = Fastify({
  * logic service + front integration
  */
 
-fastify.get('/', async (request, reply) => {
-	return { hello: 'world2' };
-});
-fastify.get('/ping', async (request, reply) => {
-	return { ping: 'pong' };
-});
-
 // Registered Routes
 fastify.register(calendarRoutes);
+fastify.get('/', async (request, reply) => {
+	return { hello: 'Welcome to calendar pleker API' };
+});
 
 /**
  * Run the server!
