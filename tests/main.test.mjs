@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CalendarG } from '../services/calendar.service.mjs';
+import { CalendarG } from '../services/calendar.service';
 
 // todo do all the following beforeAll async
 const nodeConf = () => 'cool stuff';

@@ -3,7 +3,7 @@ import { CalendarG } from '../services/calendar.service.mjs';
 export default async function calendarRoutes(fastify, options) {
 	const calendar = new CalendarG();
 	fastify.get('/calendar/events', async (request, reply) => {
-		return JSON.stringify(calendar.test_events);
+		return JSON.stringify(calendar.current_events);
 	});
 	fastify.get('/calendar/plekers-availabilities', async (request, reply) => {
 		return JSON.stringify(await calendar.plekersAvailabilityMapping());
