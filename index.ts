@@ -65,6 +65,10 @@ const start = async () => {
 				}
 			}
 		})
+		server.addHook('onSend', async (req, reply) => {
+			reply.header('Content-Type', 'application/json');
+			reply.header('charset', 'utf-8');
+		})
 		await server.listen({ port: 3000 });
 	} catch (err) {
 		server.log.error(err);
