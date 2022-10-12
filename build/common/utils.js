@@ -1,6 +1,5 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkDaysDiff = exports.shortFrDateToDateTimeObject = exports.IsoStringToShortFrDate = void 0;
 const luxon_1 = require("luxon");
 function IsoStringToShortFrDate(input_date) {
     return luxon_1.DateTime.fromISO(input_date).setLocale('fr').toLocaleString(luxon_1.DateTime.DATE_SHORT);
@@ -15,9 +14,8 @@ function shortFrDateToDateTimeObject(fr_date) {
     });
 }
 exports.shortFrDateToDateTimeObject = shortFrDateToDateTimeObject;
-const checkDaysDiff = (end_fr_short_formatted, start_iso_format) => {
+exports.checkDaysDiff = (end_fr_short_formatted, start_iso_format) => {
     const start = luxon_1.DateTime.fromISO(start_iso_format);
     const end = shortFrDateToDateTimeObject(end_fr_short_formatted);
     return end.diff(start, 'days').toObject().days;
 };
-exports.checkDaysDiff = checkDaysDiff;

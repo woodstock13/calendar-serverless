@@ -6,17 +6,12 @@ import {
 	IsoStringToShortFrDate,
 	shortFrDateToDateTimeObject,
 } from '../common/utils';
-import * as dotenv from 'dotenv';
 import Calendar = calendar_v3.Calendar;
+import { CreatePlekEventInputsType, DayAvailabilities } from '../models/calendar.model';
+import * as dotenv from 'dotenv';
 dotenv.config();
 
 const GOOGLE_CALENDAR_ID = process.env.CALENDAR_ID;
-
-interface DayAvailabilities {
-	availibilties: number
-	totalBookedPleks: number
-	plekersEmail: string[]
-}
 
 // TODO RAF:
 // x) handle event cache
@@ -140,8 +135,8 @@ export class CalendarG {
 			// @ts-ignore
 			events.forEach((event: any) => {
 				const isPlekType = event.status !== 'confirmed' || event.summary === 'PLEK';
-				// const plekerId = event.attendees[0]?.email ?? event.creator.email;
-				const plekerId = event.creator.email;
+				// will work for plek of only one pleker
+				const plekerId = event.attendees ? event.attendees[0]?.email : event.creator.email
 
 				const startDate = event.start.dateTime || event.start.date;
 				const event_day = DateTime.fromISO(startDate)
@@ -185,6 +180,7 @@ export class CalendarG {
 		return daysCounter;
 	};
 
+	// Unused for now
 	// todo :
 	// 2) write test
 	// 3) alert no events email;
@@ -230,24 +226,29 @@ export class CalendarG {
 		return daysAvailable;
 	}
 
-	/* input: plekId, plekerId, start_date_iso_plek, end_date_iso_plek, location ...*/
-	// add a *subject* is required
-	createEvent = async () => {
+	/**
+	 * Will be call by the pleker, when plek_status: intent -> SCHEDULE 
+	 * 
+	 * Caution: add a *subject* to calendar config is required for 
+	 * this call at events.insert()
+	 */
+	createEvent = async (inputs: CreatePlekEventInputsType) => {
+		// working
 		const calendarEvent = {
 			summary: 'PLEK',
 			status: 'tentative',
-			description: 'plekId, tasks and all are going here',
-			// location: 'location to add here', // could be add here but need to be sure of the visibility
-			// visibility: 'private', // not sure if service can see it
+			description: `${inputs.plekId}`,
+			location: inputs.fullAddress,
 			start: {
-				dateTime: '2022-10-08T18:18:00Z',
+				dateTime: new Date(inputs.start_date_iso_plek).toISOString(),
 				timeZone: 'Europe/Paris',
 			},
 			end: {
-				dateTime: '2022-10-08T19:19:00Z',
+				dateTime: new Date(inputs.end_date_iso_plek).toISOString(),
 				timeZone: 'Europe/Paris',
 			},
-			attendees: [{ email: 'pleker@mail.com' }],
+			attendees: [{ email: inputs.plekerId }],
+			// visibility: 'private', // not sure if service can see it
 		};
 		try {
 			const res = (
@@ -261,7 +262,7 @@ export class CalendarG {
 		} catch (err) {
 			console.error('Something went wrong: ' + err);
 			if (err) {
-				throw new Error('No events');
+				throw new Error('Cannot create event');
 			}
 		}
 	};

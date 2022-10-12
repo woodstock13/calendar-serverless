@@ -1,14 +1,59 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CalendarG } from '../services/calendar.service';
+import { CalendarG } from '../build/services/calendar.service.js';
 
 // todo do all the following beforeAll async
 const nodeConf = () => 'cool stuff';
+// write mocks after here:
+const get_mock_days_availability_with_same_day = () => {
+	const mock_days_availability_with_same_day = new Map();
+	mock_days_availability_with_same_day.set('04/10/2022', {
+		availabilities: 1,
+		pleks: 0,
+		plekers: ['thomas.gouty@pleko.ca'],
+	});
+	mock_days_availability_with_same_day.set('05/10/2022', {
+		availabilities: 1,
+		pleks: 0,
+		plekers: ['thomas.gouty@pleko.ca'],
+	});
+	mock_days_availability_with_same_day.set('06/10/2022', {
+		availabilities: 1,
+		pleks: 0,
+		plekers: ['thomas.gouty@pleko.ca'],
+	});
+	return mock_days_availability_with_same_day;
+};
+const mocking_inputs_create_event = () => {
+	console.log(
+		new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 18, 30)
+	);
+	return {
+		plekId: 'TEST',
+		plekerId: 'goutybattlenet@gmail.com',
+		start_date_iso_plek: new Date(
+			new Date().getFullYear(),
+			new Date().getMonth(),
+			new Date().getDate(),
+			18,
+			30
+		).toISOString(),
+		end_date_iso_plek: new Date(
+			new Date().getFullYear(),
+			new Date().getMonth(),
+			new Date().getDate(),
+			19,
+			30
+		).toISOString(),
+		fullAddress: '188 bd rabatau marseille 13010',
+	};
+};
 const calendar = new CalendarG();
-test('test config running', async (_t) => {
-	before(() => console.log('about to run some test'));
-	assert.equal(nodeConf(), 'cool stuff');
-});
+
+// test('test config running', async (_t) => {
+// 	before(() => console.log('about to run some test'));
+// 	assert.equal(nodeConf(), 'cool stuff');
+// });
 
 function main() {
 	test('1) Is Events on the agenda', async (_t) => {
@@ -85,34 +130,24 @@ function main() {
 					assert.equal(date_fr_res, expected_result);*/
 		});
 	});
+
+	test('4) Create event ', async (t) => {
+		await t.test('...should works when ', async (t) => {
+			const input_mock_data = mocking_inputs_create_event();
+			await assert.doesNotThrow(async () => {
+				await calendar.createEvent(input_mock_data);
+			});
+		});
+	});
 }
 // main()
 
 function specificTest() {
 	test('test createEvent running', async (_t) => {
-		const res = await calendar.createEvent();
-		assert.equal(res != null, true);
+		const input_mock_data = mocking_inputs_create_event();
+		await assert.doesNotThrow(async () => {
+			await calendar.createEvent(input_mock_data);
+		});
 	});
 }
 specificTest();
-
-// write mocks after here:
-const get_mock_days_availability_with_same_day = () => {
-	const mock_days_availability_with_same_day = new Map();
-	mock_days_availability_with_same_day.set('04/10/2022', {
-		availabilities: 1,
-		pleks: 0,
-		plekers: ['thomas.gouty@pleko.ca'],
-	});
-	mock_days_availability_with_same_day.set('05/10/2022', {
-		availabilities: 1,
-		pleks: 0,
-		plekers: ['thomas.gouty@pleko.ca'],
-	});
-	mock_days_availability_with_same_day.set('06/10/2022', {
-		availabilities: 1,
-		pleks: 0,
-		plekers: ['thomas.gouty@pleko.ca'],
-	});
-	return mock_days_availability_with_same_day;
-};

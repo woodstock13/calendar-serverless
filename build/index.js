@@ -8,20 +8,26 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const fastify_1 = require("fastify");
-// @ts-ignore
 const calendar_service_1 = require("./services/calendar.service");
-const server = (0, fastify_1.fastify)({
-    logger: true,
-});
-// TODO
-/**
- * middleware protection for call - x-api-secret
- * logic service + front integration
- */
+const dotenv = __importStar(require("dotenv"));
+dotenv.config();
+const server = fastify_1.fastify({ logger: true })
+    .withTypeProvider()
+    .register(require('@fastify/middie'), { hook: 'onRequest' });
+const isApiKeyMatching = (keyInput) => process.env.X_API_KEY_VALUE === keyInput;
 // Registered Routes
-// server.register(calendarRoutes); // todo
+server.get('/', () => __awaiter(void 0, void 0, void 0, function* () {
+    return { hello: 'Welcome to calendar pleker API' };
+}));
 const calendar = new calendar_service_1.CalendarG();
 server.get('/calendar/events', () => __awaiter(void 0, void 0, void 0, function* () {
     return JSON.stringify(yield calendar.getCurrentEvents());
@@ -48,17 +54,23 @@ server.get('/calendar/next-availabilities', () => __awaiter(void 0, void 0, void
     return JSON.stringify({ days: dates });
 }));
 server.post('/calendar/add-event', (request, reply) => __awaiter(void 0, void 0, void 0, function* () {
-    yield calendar.createEvent();
+    yield calendar.createEvent(request.body);
     return JSON.stringify('todo');
 }));
-server.get('/', () => __awaiter(void 0, void 0, void 0, function* () {
-    return { hello: 'Welcome to calendar pleker API' };
-}));
-/**
- * Run the server!
- */
+// server.register(calendarRoutes); // todo
 const start = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        // MIDDLWARE
+        server.addHook('onRequest', (req, reply) => __awaiter(void 0, void 0, void 0, function* () {
+            var _a;
+            if (req.routerPath !== '/') {
+                const inputKey = req.headers['x-api-key'];
+                console.log(req.routerPath);
+                if (_a = !isApiKeyMatching(inputKey), (_a !== null && _a !== void 0 ? _a : true)) {
+                    reply.status(401).send('Unauthorized');
+                }
+            }
+        }));
         yield server.listen({ port: 3000 });
     }
     catch (err) {

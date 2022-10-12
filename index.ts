@@ -1,19 +1,20 @@
 import { fastify } from 'fastify';
-// @ts-ignore
+import { CreatePlekEventInputsType } from './models/calendar.model';
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import { CalendarG } from './services/calendar.service';
+import * as dotenv from 'dotenv';
+dotenv.config();
 
-const server = fastify({
-	logger: true,
-});
+const server = fastify({ logger: true })
+	.withTypeProvider<TypeBoxTypeProvider>()
+	.register(require('@fastify/middie'), { hook: 'onRequest' })
 
-// TODO
-/**
- * middleware protection for call - x-api-secret
- * logic service + front integration
- */
+const isApiKeyMatching = (keyInput: string) => process.env.X_API_KEY_VALUE === keyInput
 
 // Registered Routes
-// server.register(calendarRoutes); // todo
+server.get('/', async () => {
+	return { hello: 'Welcome to calendar pleker API' };
+});
 
 const calendar = new CalendarG();
 server.get('/calendar/events', async () => {
@@ -43,20 +44,27 @@ server.get('/calendar/next-availabilities', async () => {
 
 	return JSON.stringify({ days: dates });
 });
-server.post('/calendar/add-event', async (request, reply) => {
-	await calendar.createEvent();
-	return JSON.stringify('todo');
-});
+server.post<{ Body: CreatePlekEventInputsType }>(
+	'/calendar/add-event',
+	async (request, reply) => {
+		await calendar.createEvent(request.body);
+		return JSON.stringify('todo');
+	});
+// server.register(calendarRoutes); // todo
 
-server.get('/', async () => {
-	return { hello: 'Welcome to calendar pleker API' };
-});
-
-/**
- * Run the server!
- */
 const start = async () => {
 	try {
+		// MIDDLWARE
+		server.addHook('onRequest', async (req, reply) => {
+			if (req.routerPath !== '/') {
+				const inputKey = req.headers['x-api-key'] as string
+				console.log(req.routerPath);
+
+				if (!isApiKeyMatching(inputKey) ?? true) {
+					reply.status(401).send('Unauthorized')
+				}
+			}
+		})
 		await server.listen({ port: 3000 });
 	} catch (err) {
 		server.log.error(err);

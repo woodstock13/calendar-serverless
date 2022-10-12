@@ -1,27 +1,4 @@
 'use strict';
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -31,8 +8,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CalendarG = void 0;
 const googleapis_1 = require("googleapis");
 const luxon_1 = require("luxon");
 const utils_1 = require("../common/utils");
@@ -116,16 +99,18 @@ class CalendarG {
             if (events) {
                 // @ts-ignore
                 events.forEach((event) => {
+                    var _a;
                     const isPlekType = event.status !== 'confirmed' || event.summary === 'PLEK';
-                    // const plekerId = event.attendees[0]?.email ?? event.creator.email;
-                    const plekerId = event.creator.email;
+                    // will work for plek of only one pleker
+                    const plekerId = event.attendees ? (_a = event.attendees[0]) === null || _a === void 0 ? void 0 : _a.email : event.creator.email;
                     const startDate = event.start.dateTime || event.start.date;
                     const event_day = luxon_1.DateTime.fromISO(startDate)
                         .setLocale('fr')
                         .toLocaleString(luxon_1.DateTime.DATE_SHORT);
                     const day_elements = daysCounter.get(event_day);
                     const updatingAvailabilities = () => {
-                        const is_pleker_already_counted_this_day = day_elements === null || day_elements === void 0 ? void 0 : day_elements.plekersEmail.includes(plekerId);
+                        var _a;
+                        const is_pleker_already_counted_this_day = (_a = day_elements) === null || _a === void 0 ? void 0 : _a.plekersEmail.includes(plekerId);
                         let updated_data_day;
                         if (day_elements) {
                             if (isPlekType) {
@@ -159,25 +144,29 @@ class CalendarG {
             }
             return daysCounter;
         });
-        /* input: plekId, plekerId, start_date_iso_plek, end_date_iso_plek, location ...*/
-        // add a *subject* is required
-        this.createEvent = () => __awaiter(this, void 0, void 0, function* () {
+        /**
+         * Will be call by the pleker, when plek_status: intent -> SCHEDULE
+         *
+         * Caution: add a *subject* to calendar config is required for
+         * this call at events.insert()
+         */
+        this.createEvent = (inputs) => __awaiter(this, void 0, void 0, function* () {
             var _b;
+            // working
             const calendarEvent = {
                 summary: 'PLEK',
                 status: 'tentative',
-                description: 'plekId, tasks and all are going here',
-                // location: 'location to add here', // could be add here but need to be sure of the visibility
-                // visibility: 'private', // not sure if service can see it
+                description: `${inputs.plekId}`,
+                location: inputs.fullAddress,
                 start: {
-                    dateTime: '2022-10-08T18:18:00Z',
+                    dateTime: new Date(inputs.start_date_iso_plek).toISOString(),
                     timeZone: 'Europe/Paris',
                 },
                 end: {
-                    dateTime: '2022-10-08T19:19:00Z',
+                    dateTime: new Date(inputs.end_date_iso_plek).toISOString(),
                     timeZone: 'Europe/Paris',
                 },
-                attendees: [{ email: 'pleker@mail.com' }],
+                attendees: [{ email: inputs.plekerId }],
             };
             try {
                 const res = (
@@ -191,7 +180,7 @@ class CalendarG {
             catch (err) {
                 console.error('Something went wrong: ' + err);
                 if (err) {
-                    throw new Error('No events');
+                    throw new Error('Cannot create event');
                 }
             }
         });
@@ -224,6 +213,7 @@ class CalendarG {
         // init events
         this.getEventsListFromCalendar().then();
     }
+    // Unused for now
     // todo :
     // 2) write test
     // 3) alert no events email;
@@ -234,7 +224,7 @@ class CalendarG {
      *  @return the same or the closest date available as string
      */
     getClosestDaysFrom(selected_date_iso_format, available_days_mapping) {
-        const selected_date_fr_format = (0, utils_1.IsoStringToShortFrDate)(selected_date_iso_format);
+        const selected_date_fr_format = utils_1.IsoStringToShortFrDate(selected_date_iso_format);
         let flag = false;
         let min_diff_value = 365;
         let min_date = selected_date_fr_format;
@@ -242,7 +232,7 @@ class CalendarG {
             if (value.pleks < value.availabilities) {
                 if (!flag) {
                     if (key_date !== selected_date_fr_format) {
-                        const diff = Math.abs((0, utils_1.checkDaysDiff)(key_date, selected_date_iso_format));
+                        const diff = Math.abs(utils_1.checkDaysDiff(key_date, selected_date_iso_format));
                         if (diff < min_diff_value) {
                             min_diff_value = diff;
                             min_date = key_date;
@@ -255,13 +245,13 @@ class CalendarG {
                 }
             }
         });
-        return (0, utils_1.shortFrDateToDateTimeObject)(min_date);
+        return utils_1.shortFrDateToDateTimeObject(min_date);
     }
     getNextDaysAvailable(available_days_mapping) {
         const daysAvailable = [];
         available_days_mapping.forEach((value, date) => {
             if (value.totalBookedPleks < value.availibilties) {
-                daysAvailable.push((0, utils_1.shortFrDateToDateTimeObject)(date).toISO());
+                daysAvailable.push(utils_1.shortFrDateToDateTimeObject(date).toISO());
             }
         });
         return daysAvailable;
